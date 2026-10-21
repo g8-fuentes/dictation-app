@@ -93,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final ready = _original != null && _student != null;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Corretor de Dictation'),
+        title: const Text('Dictation'),
         actions: [
           ThemeToggleButton(onToggle: widget.settings.toggleTheme),
           IconButton(
@@ -235,7 +235,7 @@ class _PhotoSlot extends StatelessWidget {
                 child: FilledButton.tonalIcon(
                   onPressed: onCamera,
                   icon: const Icon(Icons.photo_camera_outlined),
-                  label: Text(bytes == null ? 'Tirar foto' : 'Tirar outra'),
+                  label: const Text('Câmera'),
                 ),
               ),
               const SizedBox(width: 8),

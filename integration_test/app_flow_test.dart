@@ -21,6 +21,16 @@ import '../test/screens_test.dart' show reply;
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
+  var surfaceReady = false;
+  Future<void> shot(WidgetTester t, String name) async {
+    if (!surfaceReady) {
+      await binding.convertFlutterSurfaceToImage();
+      surfaceReady = true;
+    }
+    await t.pump();
+    await binding.takeScreenshot(name);
+  }
+
   Future<void> wait(WidgetTester t, int ms) async {
     final end = DateTime.now().add(Duration(milliseconds: ms));
     while (DateTime.now().isBefore(end)) {
@@ -36,17 +46,17 @@ void main() {
     await t.pumpWidget(DictationApp(settings: s, speaker: Speaker(s)));
     await t.pumpAndSettle();
     expect(find.text('Texto original'), findsOneWidget);
-    await binding.takeScreenshot('01-home');
+    await shot(t, '01-home');
 
     await t.tap(find.byType(ThemeToggleButton));
     await t.pumpAndSettle();
-    await binding.takeScreenshot('02-home-theme');
+    await shot(t, '02-home-theme');
 
     await t.tap(find.byTooltip('Configurações'));
     await t.pumpAndSettle();
     await t.enterText(find.byType(TextField), 'sk-ant-test');
     await t.pumpAndSettle();
-    await binding.takeScreenshot('03-settings');
+    await shot(t, '03-settings');
     await t.pageBack();
     await t.pumpAndSettle();
     expect(find.text('Falta a chave da API'), findsNothing);
@@ -81,19 +91,19 @@ void main() {
     expect(find.text('front'), findsOneWidget);
     await t.tap(find.text('front'));
     await wait(t, 600);
-    await binding.takeScreenshot('04-loading');
+    await shot(t, '04-loading');
     await t.tap(find.text('teacher'));
     await wait(t, 300);
 
     await wait(t, 6000);
     await t.pumpAndSettle();
     expect(find.text('Resultado'), findsOneWidget);
-    await binding.takeScreenshot('05-result');
+    await shot(t, '05-result');
 
     await t.tap(find.text('Tocar'));
     await wait(t, 1500);
     expect(find.textContaining('Parar'), findsOneWidget);
-    await binding.takeScreenshot('06-result-playing');
+    await shot(t, '06-result-playing');
     await t.tap(find.textContaining('Parar'));
     await wait(t, 3000);
     expect(find.text('Tocar'), findsOneWidget);
@@ -101,6 +111,6 @@ void main() {
     await t.tap(find.byTooltip('Ouvir este trecho').first);
     await wait(t, 2000);
     await t.scrollUntilVisible(find.text('Nova correção'), 300);
-    await binding.takeScreenshot('07-result-bottom');
+    await shot(t, '07-result-bottom');
   });
 }
