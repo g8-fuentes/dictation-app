@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-import '../claude_api.dart';
+import '../gemini_api.dart';
 import '../settings.dart';
 import '../tts.dart';
 import 'result_screen.dart';
@@ -27,7 +27,7 @@ class LoadingScreen extends StatefulWidget {
   final Uint8List student;
 
   /// Lets tests swap in a fake; the real one is built from settings.
-  final ClaudeApi? api;
+  final GeminiApi? api;
 
   @override
   State<LoadingScreen> createState() => _LoadingScreenState();
@@ -56,7 +56,7 @@ class _LoadingScreenState extends State<LoadingScreen> with SingleTickerProvider
     _ticker = Timer.periodic(const Duration(seconds: 4), (_) {
       if (mounted) setState(() => _step = (_step + 1) % _steps.length);
     });
-    final api = widget.api ?? ClaudeApi(widget.settings.apiKey, widget.settings.model);
+    final api = widget.api ?? GeminiApi(widget.settings.apiKey);
 
     api.transcribeOriginal(widget.original).then((text) {
       final words = text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
@@ -78,7 +78,7 @@ class _LoadingScreenState extends State<LoadingScreen> with SingleTickerProvider
     }, onError: (Object e) {
       if (!mounted) return;
       widget.speaker.stop();
-      Navigator.of(context).pop(e is ClaudeError ? e.message : 'Algo deu errado. Tente de novo.');
+      Navigator.of(context).pop(e is ApiError ? e.message : 'Algo deu errado. Tente de novo.');
     });
   }
 

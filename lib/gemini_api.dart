@@ -5,45 +5,50 @@ import 'package:http/http.dart' as http;
 
 import 'models.dart';
 
-class ClaudeError implements Exception {
-  ClaudeError(this.message);
+class ApiError implements Exception {
+  ApiError(this.message, {this.tryOtherModel = false});
   final String message;
+
+  /// The model is busy, over its free quota or gone; another one may work.
+  final bool tryOtherModel;
   @override
   String toString() => message;
 }
 
-/// Talks to the Anthropic Messages API directly with the user's own key.
-class ClaudeApi {
-  ClaudeApi(this.apiKey, this.model, {http.Client? client}) : _client = client ?? http.Client();
+/// Talks to the Gemini API directly with the user's own (free) key from
+/// Google AI Studio.
+class GeminiApi {
+  GeminiApi(this.apiKey, {http.Client? client}) : _client = client ?? http.Client();
+
+  /// Tried in order: the free Flash models often answer "high demand" (503),
+  /// and each has its own free quota.
+  static const models = ['gemini-flash-latest', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
+  static const quickModels = ['gemini-flash-lite-latest', 'gemini-3.5-flash-lite'];
 
   final String apiKey;
-  final String model;
   final http.Client _client;
-  static const quickModel = 'claude-haiku-5-5';
-  static final _url = Uri.parse('https://api.anthropic.com/v1/messages');
 
   /// Fast, plain transcription of the book page, used to fill the loading
   /// screen with the dictation's words while the full correction runs.
   Future<String> transcribeOriginal(Uint8List original) async {
-    final text = await _send(
-      quickModel,
+    final text = await _sendAny(
+      quickModels,
       [original],
       'This photo shows a page from a Callan Method book with a dictation passage. '
           'Transcribe ONLY the dictation passage, exactly as printed. '
           'Reply with the text only, no comments.',
+      json: false,
       maxTokens: 4000,
-      effort: 'low',
     );
     return text.trim();
   }
 
   Future<Correction> correct(Uint8List original, Uint8List student) async {
-    final text = await _send(model, [original, student], _prompt,
-        maxTokens: 32000, effort: 'medium');
+    final text = await _sendAny(models, [original, student], _prompt, json: true, maxTokens: 32000);
     final start = text.indexOf('{');
     final end = text.lastIndexOf('}');
     if (start < 0 || end <= start) {
-      throw ClaudeError('Não consegui organizar a resposta. Tente de novo.');
+      throw ApiError('Não consegui organizar a resposta. Tente de novo.');
     }
     try {
       final data = jsonDecode(text.substring(start, end + 1)) as Map<String, dynamic>;
@@ -51,69 +56,81 @@ class ClaudeApi {
       if (c.segments.isEmpty) throw const FormatException();
       return c;
     } catch (_) {
-      throw ClaudeError('Não consegui organizar a resposta. Tente de novo.');
+      throw ApiError('Não consegui organizar a resposta. Tente de novo.');
+    }
+  }
+
+  Future<String> _sendAny(List<String> models, List<Uint8List> images, String prompt,
+      {required bool json, required int maxTokens}) async {
+    for (var i = 0;; i++) {
+      try {
+        return await _send(models[i], images, prompt, json: json, maxTokens: maxTokens);
+      } on ApiError catch (e) {
+        if (!e.tryOtherModel || i == models.length - 1) rethrow;
+      }
     }
   }
 
   /// Streams the reply so the connection never sits idle for minutes (mobile
   /// networks drop silent connections), and returns the full text.
   Future<String> _send(String model, List<Uint8List> images, String prompt,
-      {required int maxTokens, required String effort}) async {
+      {required bool json, required int maxTokens}) async {
     final body = jsonEncode({
-      'model': model,
-      'max_tokens': maxTokens,
-      'stream': true,
-      'output_config': {'effort': effort},
-      'messages': [
+      'contents': [
         {
           'role': 'user',
-          'content': [
+          'parts': [
             for (final img in images)
               {
-                'type': 'image',
-                'source': {
-                  'type': 'base64',
-                  'media_type': _mediaType(img),
-                  'data': base64Encode(img),
-                },
+                'inline_data': {'mime_type': _mediaType(img), 'data': base64Encode(img)},
               },
-            {'type': 'text', 'text': prompt},
+            {'text': prompt},
           ],
         },
       ],
+      'generationConfig': {
+        'maxOutputTokens': maxTokens,
+        if (json) 'responseMimeType': 'application/json',
+      },
     });
 
-    final req = http.Request('POST', _url)
-      ..headers.addAll({
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      })
+    final url = Uri.parse(
+        'https://generativelanguage.googleapis.com/v1beta/models/$model:streamGenerateContent?alt=sse');
+    final req = http.Request('POST', url)
+      ..headers.addAll({'x-goog-api-key': apiKey, 'content-type': 'application/json'})
       ..body = body;
 
     http.StreamedResponse res;
     try {
       res = await _client.send(req).timeout(const Duration(seconds: 60));
     } catch (_) {
-      throw ClaudeError('Sem conexão com o Claude. Verifique a internet e tente de novo.');
+      throw ApiError('Sem conexão com o Gemini. Verifique a internet e tente de novo.');
     }
 
     if (res.statusCode != 200) {
       final errBody = await res.stream.bytesToString().catchError((_) => '');
-      throw ClaudeError(switch (res.statusCode) {
-        401 => 'Chave da API inválida. Confira em Configurações.',
-        403 => 'Esta chave não tem permissão para usar o modelo escolhido.',
+      final msg = _apiMessage(errBody);
+      if (const {404, 429, 500, 503, 504}.contains(res.statusCode)) {
+        throw ApiError(
+          res.statusCode == 429
+              ? 'Limite gratuito do Gemini atingido. Espere um minuto e tente de novo.'
+              : 'O Gemini está sobrecarregado agora. Tente de novo em instantes.',
+          tryOtherModel: true,
+        );
+      }
+      throw ApiError(switch (res.statusCode) {
+        400 when msg.toLowerCase().contains('api key') =>
+          'Chave da API inválida. Confira em Configurações.',
+        401 || 403 => 'Chave da API inválida ou sem permissão. Confira em Configurações.',
         413 => 'As fotos são grandes demais. Tente fotos menores.',
-        429 => 'Muitas correções seguidas. Espere um pouco e tente de novo.',
-        529 || 503 => 'O Claude está sobrecarregado agora. Tente de novo em instantes.',
-        _ => 'Algo deu errado (${res.statusCode}). ${_apiMessage(errBody)}',
+        _ => 'Algo deu errado (${res.statusCode}). $msg',
       });
     }
 
     final text = StringBuffer();
-    String? stopReason;
+    String? finish;
     try {
-      // Each SSE event arrives within seconds while the model works; a long
+      // Chunks arrive every few seconds while the model works; a long
       // silence means the connection is dead.
       final lines = res.stream
           .timeout(const Duration(seconds: 90))
@@ -127,34 +144,32 @@ class ClaudeApi {
         } catch (_) {
           continue;
         }
-        switch (ev['type']) {
-          case 'content_block_delta':
-            final d = ev['delta'];
-            if (d is Map && d['type'] == 'text_delta') text.write(d['text']);
-          case 'message_delta':
-            final d = ev['delta'];
-            if (d is Map && d['stop_reason'] != null) stopReason = '${d['stop_reason']}';
-          case 'error':
-            final type = (ev['error'] is Map) ? ev['error']['type'] : null;
-            throw ClaudeError(type == 'overloaded_error'
-                ? 'O Claude está sobrecarregado agora. Tente de novo em instantes.'
-                : 'O Claude teve um erro. Tente de novo.');
+        if (ev['error'] != null) {
+          throw ApiError('O Gemini teve um erro. Tente de novo.');
+        }
+        final blocked = (ev['promptFeedback'] as Map?)?['blockReason'];
+        if (blocked != null) finish = 'BLOCKED';
+        for (final c in (ev['candidates'] as List? ?? const [])) {
+          if (c is! Map) continue;
+          for (final p in ((c['content'] as Map?)?['parts'] as List? ?? const [])) {
+            if (p is Map && p['thought'] != true && p['text'] is String) text.write(p['text']);
+          }
+          if (c['finishReason'] != null) finish = '${c['finishReason']}';
         }
       }
-    } on ClaudeError {
+    } on ApiError {
       rethrow;
     } catch (_) {
-      throw ClaudeError('A conexão caiu durante a análise. Tente de novo.');
+      throw ApiError('A conexão caiu durante a análise. Tente de novo.');
     }
 
-    if (stopReason == 'refusal') {
-      throw ClaudeError('O Claude não conseguiu processar essas fotos. Tente outras fotos.');
-    }
-    if (stopReason == 'max_tokens') {
-      throw ClaudeError('O texto é longo demais para uma correção só. Tente uma foto com menos texto.');
+    if (finish == 'MAX_TOKENS') {
+      throw ApiError('O texto é longo demais para uma correção só. Tente uma foto com menos texto.');
     }
     if (text.isEmpty) {
-      throw ClaudeError('O Claude não conseguiu ler essas fotos. Tente fotos mais nítidas.');
+      throw ApiError(finish != null && finish != 'STOP'
+          ? 'O Gemini não conseguiu processar essas fotos. Tente outras fotos.'
+          : 'O Gemini não conseguiu ler essas fotos. Tente fotos mais nítidas.');
     }
     return text.toString();
   }

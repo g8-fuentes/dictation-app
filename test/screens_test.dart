@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:dictation_app/claude_api.dart';
+import 'package:dictation_app/gemini_api.dart';
 import 'package:dictation_app/main.dart';
 import 'package:dictation_app/screens/loading_screen.dart';
 import 'package:dictation_app/settings.dart';
@@ -33,22 +33,38 @@ Future<AppSettings> setup(WidgetTester tester, [Map<String, Object> prefs = cons
   return s;
 }
 
-http.Response reply(String text, {String stop = 'end_turn'}) {
-  final events = [
-    {'type': 'message_start', 'message': {'id': 'm'}},
-    {'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'text', 'text': ''}},
-    // Split the text so the test covers stitching deltas back together.
+/// A Gemini streaming reply (server-sent events) carrying [text].
+http.Response reply(String text, {String finish = 'STOP'}) {
+  final chunks = <Map<String, dynamic>>[
+    // A thought part first: it must never reach the answer.
+    {
+      'candidates': [
+        {
+          'content': {
+            'parts': [
+              {'text': 'thinking...', 'thought': true}
+            ]
+          }
+        }
+      ]
+    },
+    // Split the text so the test covers stitching chunks back together.
     for (var i = 0; i < text.length; i += 7)
       {
-        'type': 'content_block_delta',
-        'index': 0,
-        'delta': {'type': 'text_delta', 'text': text.substring(i, (i + 7).clamp(0, text.length))},
+        'candidates': [
+          {
+            'content': {
+              'role': 'model',
+              'parts': [
+                {'text': text.substring(i, (i + 7).clamp(0, text.length))}
+              ]
+            },
+            if (i + 7 >= text.length) 'finishReason': finish,
+          }
+        ]
       },
-    {'type': 'content_block_stop', 'index': 0},
-    {'type': 'message_delta', 'delta': {'stop_reason': stop}},
-    {'type': 'message_stop'},
   ];
-  final sse = events.map((e) => 'event: ${e['type']}\ndata: ${jsonEncode(e)}\n\n').join();
+  final sse = chunks.map((e) => 'data: ${jsonEncode(e)}\r\n\r\n').join();
   return http.Response.bytes(utf8.encode(sse), 200, headers: {'content-type': 'text/event-stream'});
 }
 
@@ -83,24 +99,20 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Configurações'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), ' sk-ant-test ');
+    await tester.enterText(find.byType(TextField), ' AIza-test ');
     await tester.pumpAndSettle();
-    expect(s.apiKey, 'sk-ant-test');
-    await tester.tap(find.text('Mais preciso (Opus 5.5)'));
-    await tester.pumpAndSettle();
-    expect(s.model, 'claude-opus-5-5');
+    expect(s.apiKey, 'AIza-test');
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('Falta a chave da API'), findsNothing);
   });
 
   testWidgets('loading shows tappable words, then the result', (tester) async {
-    final s = await setup(tester, {'apiKey': 'k'});
+    final s = await setup(tester, {'geminiKey': 'k'});
     var calls = 0;
     final client = MockClient((req) async {
       calls++;
-      final body = jsonDecode(req.body) as Map;
-      if (body['model'] == ClaudeApi.quickModel) {
+      if (req.url.path.contains(GeminiApi.quickModels.first)) {
         return reply('The teacher is standing in front of the class.');
       }
       await Future.delayed(const Duration(seconds: 2));
@@ -114,7 +126,7 @@ void main() {
         speaker: Speaker(s),
         original: img,
         student: img,
-        api: ClaudeApi('k', s.model, client: client),
+        api: GeminiApi('k', client: client),
       ),
     ));
     await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 300)));
@@ -142,8 +154,9 @@ void main() {
   });
 
   testWidgets('loading returns a readable error on a bad key', (tester) async {
-    final s = await setup(tester, {'apiKey': 'k'});
-    final client = MockClient((req) async => http.Response('{"error":{"message":"bad"}}', 401));
+    final s = await setup(tester, {'geminiKey': 'k'});
+    final client = MockClient((req) async =>
+        http.Response('{"error":{"code":400,"message":"API key not valid. Please pass a valid API key."}}', 400));
     String? result;
     await tester.pumpWidget(MaterialApp(
       home: Builder(
@@ -155,7 +168,7 @@ void main() {
                 speaker: Speaker(s),
                 original: Uint8List(20),
                 student: Uint8List(20),
-                api: ClaudeApi('k', s.model, client: client),
+                api: GeminiApi('k', client: client),
               ),
             ));
           },

@@ -3,24 +3,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// App-wide preferences, persisted on the device.
 class AppSettings extends ChangeNotifier {
-  static const models = {
-    'claude-sonnet-5-5': 'Equilibrado (Sonnet 5.5)',
-    'claude-opus-5-5': 'Mais preciso (Opus 5.5)',
-  };
-
   SharedPreferences? _store;
 
   String apiKey = '';
-  String model = 'claude-sonnet-5-5';
   ThemeMode themeMode = ThemeMode.system;
   bool britishVoice = true;
   double speechRate = 0.42;
 
   Future<void> load() async {
     _store = await SharedPreferences.getInstance();
-    apiKey = _store!.getString('apiKey') ?? '';
-    final m = _store!.getString('model');
-    if (m != null && models.containsKey(m)) model = m;
+    apiKey = _store!.getString('geminiKey') ?? '';
     themeMode = ThemeMode.values[_store!.getInt('themeMode') ?? ThemeMode.system.index];
     britishVoice = _store!.getBool('britishVoice') ?? true;
     speechRate = _store!.getDouble('speechRate') ?? 0.42;
@@ -30,13 +22,7 @@ class AppSettings extends ChangeNotifier {
 
   Future<void> setApiKey(String v) async {
     apiKey = v.trim();
-    await _store?.setString('apiKey', apiKey);
-    notifyListeners();
-  }
-
-  Future<void> setModel(String v) async {
-    model = v;
-    await _store?.setString('model', v);
+    await _store?.setString('geminiKey', apiKey);
     notifyListeners();
   }
 

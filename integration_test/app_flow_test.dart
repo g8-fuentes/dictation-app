@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:dictation_app/claude_api.dart';
+import 'package:dictation_app/gemini_api.dart';
 import 'package:dictation_app/main.dart';
 import 'package:dictation_app/screens/loading_screen.dart';
 import 'package:dictation_app/settings.dart';
@@ -56,13 +56,13 @@ void main() {
 
     await t.tap(find.byTooltip('Configurações'));
     await t.pumpAndSettle();
-    await t.enterText(find.byType(TextField), 'sk-ant-test');
+    await t.enterText(find.byType(TextField), 'AIza-test');
     await t.pumpAndSettle();
     await shot(t, '03-settings');
     await t.pageBack();
     await t.pumpAndSettle();
     expect(find.text('Falta a chave da API'), findsNothing);
-    expect((await SharedPreferences.getInstance()).getString('apiKey'), 'sk-ant-test');
+    expect((await SharedPreferences.getInstance()).getString('geminiKey'), 'AIza-test');
   });
 
   testWidgets('loading words speak, result narrates', (t) async {
@@ -70,8 +70,7 @@ void main() {
     await s.load();
     final speaker = Speaker(s);
     final client = MockClient((req) async {
-      final body = jsonDecode(req.body) as Map;
-      if (body['model'] == ClaudeApi.quickModel) {
+      if (req.url.path.contains(GeminiApi.quickModels.first)) {
         return reply('The teacher is standing in front of the class.');
       }
       await Future.delayed(const Duration(seconds: 6));
@@ -86,7 +85,7 @@ void main() {
         speaker: speaker,
         original: img,
         student: img,
-        api: ClaudeApi('k', s.model, client: client),
+        api: GeminiApi('k', client: client),
       ),
     ));
     await wait(t, 1500);

@@ -36,9 +36,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: (context, _) => ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text('Chave da API da Anthropic', style: text.titleMedium),
+            Text('Chave da API do Gemini', style: text.titleMedium),
             const SizedBox(height: 4),
-            Text('Crie em console.anthropic.com > API Keys. Ela fica salva só neste celular.',
+            Text('Grátis em aistudio.google.com/apikey. Ela fica salva só neste celular.',
                 style: text.bodySmall),
             const SizedBox(height: 12),
             TextField(
@@ -48,7 +48,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               enableSuggestions: false,
               decoration: InputDecoration(
                 border: const OutlineInputBorder(),
-                hintText: 'sk-ant-...',
+                hintText: 'Cole a chave aqui',
                 suffixIcon: IconButton(
                   icon: Icon(_show ? Icons.visibility_off : Icons.visibility),
                   onPressed: () => setState(() => _show = !_show),
@@ -56,21 +56,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               onChanged: s.setApiKey,
             ),
-            const SizedBox(height: 28),
-            Text('Modelo', style: text.titleMedium),
             const SizedBox(height: 8),
-            RadioGroup<String>(
-              groupValue: s.model,
-              onChanged: (v) => s.setModel(v!),
-              child: Column(children: [
-                for (final e in AppSettings.models.entries)
-                  RadioListTile<String>(
-                    contentPadding: EdgeInsets.zero,
-                    value: e.key,
-                    title: Text(e.value),
-                  ),
-              ]),
-            ),
             const SizedBox(height: 20),
             Text('Voz da narração', style: text.titleMedium),
             const SizedBox(height: 8),
