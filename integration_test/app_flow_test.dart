@@ -21,7 +21,9 @@ import '../test/screens_test.dart' show reply;
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
+  // The surface switch has to be redone in every test.
   var surfaceReady = false;
+  setUp(() => surfaceReady = false);
   Future<void> shot(WidgetTester t, String name) async {
     if (!surfaceReady) {
       await binding.convertFlutterSurfaceToImage();
