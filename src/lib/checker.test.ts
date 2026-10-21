@@ -87,3 +87,12 @@ describe('pronunciation', () => {
     expect(comparePronunciation('I have two cats.', 'I have 2 cats').every((w) => w.status === 'ok')).toBe(true)
   })
 })
+
+describe('loose punctuation', () => {
+  test('is never a missing or extra word', () => {
+    const c = check('He said — quietly — " Good morning. "', 'He said quietly Good morning.')
+    expect(c.mistakes).toEqual([])
+    const d = check('The cat sat on the mat.', 'The cat - sat on the mat . "')
+    expect(d.mistakes.some((m) => m.type === 'palavra a mais' || m.type === 'palavra faltando')).toBe(false)
+  })
+})

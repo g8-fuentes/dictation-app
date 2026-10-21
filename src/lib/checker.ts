@@ -5,7 +5,11 @@ import { scoreFor, type Correction, type Mistake, type Token } from './models'
 
 const edgePunct = /^[^\p{L}\p{N}']+|[^\p{L}\p{N}']+$/gu
 
-export const words = (text: string) => text.trim().split(/\s+/).filter(Boolean)
+/**
+ * The words of a text. A loose mark with no letter ("—", a lone quote,
+ * "...") is left out, so it never counts as a missing or extra word.
+ */
+export const words = (text: string) => text.trim().split(/\s+/).filter((t) => /[\p{L}\p{N}]/u.test(t))
 
 /** The bare word: no punctuation around it, lower case. */
 export const bare = (w: string) => w.replace(edgePunct, '').toLowerCase()
