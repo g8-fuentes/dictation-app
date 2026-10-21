@@ -75,8 +75,8 @@ void main() {
     expect(find.text('Class tem dois "s".'), findsOneWidget);
     await tester.tap(find.text('Tocar'));
     await tester.pump();
-    expect(find.textContaining('Parar'), findsOneWidget);
-    await tester.tap(find.textContaining('Parar'));
+    expect(find.byKey(const ValueKey('stop-fab')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('stop-fab')));
     await tester.pump(const Duration(seconds: 3));
     expect(find.text('Tocar'), findsOneWidget);
   });

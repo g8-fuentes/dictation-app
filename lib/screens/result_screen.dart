@@ -102,9 +102,19 @@ class _ResultScreenState extends State<ResultScreen> {
         title: const Text('Resultado'),
         actions: [ThemeToggleButton(onToggle: widget.settings.toggleTheme)],
       ),
+      // The play button scrolls away while the reading follows the text, so
+      // keep a stop button on screen.
+      floatingActionButton: _playing
+          ? FloatingActionButton.extended(
+              key: const ValueKey('stop-fab'),
+              onPressed: _togglePlay,
+              icon: const Icon(Icons.stop),
+              label: Text(_current >= 0 ? 'Parar · trecho ${_current + 1}' : 'Parar'),
+            )
+          : null,
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
           children: [
             _Summary(result: r),
             const SizedBox(height: 16),

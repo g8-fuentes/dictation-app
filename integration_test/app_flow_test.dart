@@ -104,11 +104,11 @@ void main() {
 
     await t.tap(find.text('Tocar'));
     await wait(t, 1500);
-    expect(find.textContaining('Parar'), findsOneWidget);
+    expect(find.byKey(const ValueKey('stop-fab')), findsOneWidget);
     await shot(t, '06-result-playing');
-    await t.tap(find.textContaining('Parar'));
+    await t.tap(find.byKey(const ValueKey('stop-fab')));
     await wait(t, 3000);
-    expect(find.text('Tocar'), findsOneWidget);
+    expect(find.byKey(const ValueKey('stop-fab')), findsNothing);
 
     await t.tap(find.byTooltip('Ouvir este trecho').first);
     await wait(t, 2000);
