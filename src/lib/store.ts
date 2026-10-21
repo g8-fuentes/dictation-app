@@ -38,9 +38,11 @@ export interface Settings {
   theme: 'light' | 'dark' | null
   british: boolean
   rate: number
+  /** The student's own Gemini key; kept only in this browser. */
+  geminiKey: string
 }
 
-export const defaultSettings: Settings = { theme: null, british: true, rate: 0.95 }
+export const defaultSettings: Settings = { theme: null, british: true, rate: 0.95, geminiKey: '' }
 
 export function useSettings() {
   const [s, set] = useStored<Settings>('settings', defaultSettings)

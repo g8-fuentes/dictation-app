@@ -1,6 +1,6 @@
 # dictation-app
 
-App web (PWA) que corrige a **dictation** dos livros Callan: você tira a foto da página do livro e a foto do que o aluno escreveu, e o app aponta os erros. Funciona no navegador do celular, pode ser instalado na tela inicial e não precisa de conta nem de chave de API.
+App web (PWA) que corrige a **dictation** dos livros Callan: você tira a foto da página do livro e a foto do que o aluno escreveu, e o app aponta os erros. Funciona no navegador do celular e pode ser instalado na tela inicial. As fotos são lidas pelo Gemini com a sua chave gratuita do [Google AI Studio](https://aistudio.google.com/apikey), colada no próprio app.
 
 **Abrir:** https://g8-fuentes.github.io/dictation-app/
 
@@ -19,7 +19,7 @@ App web (PWA) que corrige a **dictation** dos livros Callan: você tira a foto d
 
 ## Como funciona
 
-Tudo roda no próprio navegador: a leitura das fotos usa o [Tesseract.js](https://github.com/naptha/tesseract.js) (servido junto com o app e guardado para uso offline), a voz e o reconhecimento de fala são os do celular, e a comparação dos textos é um alinhamento palavra a palavra feito no app. Letra cursiva pode ser lida com erros; por isso existe o **Marcar como certo**. O reconhecimento de fala precisa de internet no Chrome.
+O Gemini transcreve a página do livro e a letra do aluno exatamente como foi escrita (numa única chamada), e o app compara os dois textos palavra por palavra, divide em partes e explica cada erro. A chave fica salva só no navegador do aparelho (Configurações) e é enviada apenas ao Google; nunca vai para o repositório. Se o Gemini estiver ocupado, o app tenta outro modelo Flash. Sem chave, as abas Ouvir e Pronúncia leem fotos de texto impresso offline com o [Tesseract.js](https://github.com/naptha/tesseract.js). A voz e o reconhecimento de fala são os do celular (o reconhecimento precisa de internet no Chrome). Se a leitura errar uma palavra, use **Marcar como certo**.
 
 A versão anterior em Flutter (APK) está no branch `flutter-app`.
 

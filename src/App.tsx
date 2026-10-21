@@ -7,7 +7,8 @@ import { PronunciationTab } from './components/PronunciationTab'
 import { ResultView } from './components/ResultView'
 import { SettingsSheet } from './components/SettingsSheet'
 import type { DictationRecord } from './lib/models'
-import { warmUp } from './lib/ocr'
+import { readPhoto } from './lib/gemini'
+import { readText, warmUp } from './lib/ocr'
 import { useHistory, useSettings } from './lib/store'
 
 type Tab = 'correct' | 'progress' | 'listen' | 'speak'
@@ -26,11 +27,15 @@ export default function App() {
   const [open, setOpen] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
 
-  // Loads the reading engine in the background so the first analysis is quick.
+  // Without a Gemini key, photos of printed text are read offline; the
+  // engine loads in the background so the first one is quick.
+  const key = settings.geminiKey
   useEffect(() => {
+    if (key) return
     const t = setTimeout(() => warmUp(), 800)
     return () => clearTimeout(t)
-  }, [])
+  }, [key])
+  const read = (f: Blob) => (key ? readPhoto(key, f) : readText(f))
 
   const record = history.find((r) => r.id === open)
   const dark = settings.theme === 'dark' || (!settings.theme && matchMedia('(prefers-color-scheme: dark)').matches)
@@ -57,6 +62,8 @@ export default function App() {
           <>
             <div hidden={tab !== 'correct'}>
               <CorrectTab
+                geminiKey={key}
+                onKey={(k) => setSettings({ geminiKey: k })}
                 onDone={(r) => {
                   save(r)
                   setOpen(r.id)
@@ -66,8 +73,8 @@ export default function App() {
             {tab === 'progress' && (
               <ProgressTab history={history} onOpen={(r) => setOpen(r.id)} onDelete={(r) => setHistory((h) => h.filter((x) => x.id !== r.id))} />
             )}
-            {tab === 'listen' && <ListenTab voice={settings} />}
-            {tab === 'speak' && <PronunciationTab history={history} voice={settings} />}
+            {tab === 'listen' && <ListenTab voice={settings} read={read} />}
+            {tab === 'speak' && <PronunciationTab history={history} voice={settings} read={read} />}
           </>
         )}
       </main>

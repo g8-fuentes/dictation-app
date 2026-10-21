@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { GeminiError } from '../lib/gemini'
 import { readText } from '../lib/ocr'
 import { canSpeak, readAll, stopSpeaking, type VoiceSettings } from '../lib/voice'
 import { Icon } from './Icon'
@@ -33,8 +34,8 @@ export function ListenTab({ voice, read = readText }: { voice: VoiceSettings; re
       if (!t.trim()) throw new Error()
       setText(t)
       play(t)
-    } catch {
-      setError('Não encontrei texto nessa foto. Tente uma foto mais nítida.')
+    } catch (e) {
+      setError(e instanceof GeminiError ? e.message : 'Não encontrei texto nessa foto. Tente uma foto mais nítida.')
     } finally {
       setBusy(false)
     }

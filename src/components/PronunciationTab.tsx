@@ -3,6 +3,7 @@ import { canListen, Listener } from '../lib/listen'
 import type { DictationRecord } from '../lib/models'
 import { recordTitle } from '../lib/models'
 import { comparePronunciation, pronunciationScore, type SpokenWord } from '../lib/pronunciation'
+import { GeminiError } from '../lib/gemini'
 import { readText } from '../lib/ocr'
 import { formatDate } from '../lib/store'
 import { say, stopSpeaking, type VoiceSettings } from '../lib/voice'
@@ -46,8 +47,8 @@ export function PronunciationTab({
     setBusy(true)
     try {
       setPhotoText(await read(f))
-    } catch {
-      setError('Não consegui ler a foto.')
+    } catch (e) {
+      setError(e instanceof GeminiError ? e.message : 'Não consegui ler a foto.')
     } finally {
       setBusy(false)
     }

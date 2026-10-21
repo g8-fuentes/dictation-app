@@ -218,3 +218,9 @@ ins.missing { background: var(--good-bg); border-radius: 4px; padding: 0 2px; }
 .segmented button.on { background: var(--tonal); color: var(--on-tonal); }
 input[type='range'] { width: 100%; accent-color: var(--primary); }
 .mistakes .row > .btn { flex: none; }
+.key-card { border-color: var(--primary); }
+.key-card a, .sheet a { color: var(--primary); font-weight: 600; }
+.key-row { display: flex; gap: 8px; align-items: center; }
+.key-row .text { margin-top: 0; flex: 1; min-width: 0; }
+.sheet .text { margin-top: 0; }
+.btn.primary:disabled { opacity: 1; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }

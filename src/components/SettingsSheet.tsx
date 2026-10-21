@@ -1,6 +1,7 @@
 import type { Settings } from '../lib/store'
 import { say } from '../lib/voice'
 import { Icon } from './Icon'
+import { keyLink } from './KeyCard'
 
 export function SettingsSheet({ settings, onChange, onClose }: { settings: Settings; onChange: (p: Partial<Settings>) => void; onClose: () => void }) {
   return (
@@ -12,6 +13,23 @@ export function SettingsSheet({ settings, onChange, onClose }: { settings: Setti
             <Icon name="close" />
           </button>
         </div>
+        <h3>Chave do Gemini</h3>
+        <input
+          className="text"
+          type="password"
+          autoComplete="off"
+          placeholder="Cole a chave aqui"
+          value={settings.geminiKey}
+          onChange={(e) => onChange({ geminiKey: e.target.value.trim() })}
+          aria-label="Chave do Gemini"
+        />
+        <p className="muted small">
+          Gratuita no Google AI Studio:{' '}
+          <a href={keyLink} target="_blank" rel="noreferrer">
+            pegar minha chave
+          </a>
+          . Fica salva só neste aparelho e é enviada apenas ao Google.
+        </p>
         <h3>Tema</h3>
         <div className="segmented">
           {([['light', 'Claro'], ['dark', 'Escuro'], [null, 'Automático']] as const).map(([v, label]) => (
@@ -42,7 +60,7 @@ export function SettingsSheet({ settings, onChange, onClose }: { settings: Setti
         <button className="btn outline" onClick={() => say('This is how the dictation will sound.', settings)}>
           <Icon name="speaker" size={20} /> Testar voz
         </button>
-        <p className="muted small">Tudo funciona no aparelho, sem conta e sem chave. Suas dictations ficam salvas só neste navegador.</p>
+        <p className="muted small">Suas dictations ficam salvas só neste navegador.</p>
       </div>
     </div>
   )
