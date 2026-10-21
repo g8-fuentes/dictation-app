@@ -1,25 +1,35 @@
-# Dictation
+# dictation-app
 
-App Android (Flutter) para corrigir as dictations do Método Callan.
+App web (PWA) que corrige a **dictation** dos livros Callan: você tira a foto da página do livro e a foto do que o aluno escreveu, e o app aponta os erros. Funciona no navegador do celular, pode ser instalado na tela inicial e não precisa de conta nem de chave de API.
 
-Tudo funciona no próprio celular, sem chave de API e sem conta.
+**Abrir:** https://g8-fuentes.github.io/dictation-app/
 
-- **Corrigir:** tire ou escolha a foto da página do livro e a do caderno do aluno e toque em **Corrigir**. O texto das fotos é lido no aparelho (ML Kit do Google, offline), comparado palavra por palavra e cada erro vem com uma explicação curta. A dictation aparece dividida em trechos, com narração e pausas como num ditado. Se a leitura da letra de mão errar, toque em **Marcar como certo** no erro e a nota é recalculada.
-- **Progresso:** cada correção fica salva com a data, o número da dictation (lido da página) e a nota, com um gráfico das notas ao longo do curso. Arraste um item para a esquerda para apagar.
-- **Ouvir:** foto de qualquer texto em inglês, lido de uma vez em voz nativa.
-- **Pronúncia:** escolha uma dictation do histórico (ou a foto de um texto), grave a sua leitura e veja as palavras que o celular entendeu diferente. Toque numa palavra para ouvir a pronúncia certa. Usa o reconhecimento de voz do próprio Android, então é uma aproximação, não uma avaliação fonética.
+## Instalar no celular
 
-O tema claro/escuro troca no ícone do topo; voz e velocidade ficam em Configurações.
+- **Android (Chrome):** abra o link, toque em ⋮ e depois em **Instalar app** (ou **Adicionar à tela inicial**).
+- **iPhone (Safari):** abra o link, toque em Compartilhar e depois em **Adicionar à Tela de Início**.
 
-## APK
+## O que tem
 
-Cada push na `main` roda o workflow **Build APK** no GitHub Actions. O APK fica em *Actions → última execução → Artifacts → dictation-apk* (vem dentro de um .zip).
+- **Corrigir:** duas fotos (câmera ou galeria) e um toque em Corrigir. O texto é dividido em partes curtas, com a cópia do aluno marcada (riscado = errado, verde = certo, ^ = faltou, ondulado = sobrou), a explicação de cada erro e a opção **Marcar como certo** quando o app leu a letra errado. Dá para ouvir a dictation com pausas, normal ou devagar.
+- **Progresso:** todas as dictations ficam salvas no aparelho, com nota, média, melhor nota e gráfico da evolução.
+- **Ouvir:** foto de qualquer texto em inglês, lido de uma vez na voz nativa do celular.
+- **Pronúncia:** escolha uma dictation (ou foto de um texto), grave lendo em voz alta e veja as palavras que soaram diferente, com o áudio certo de cada uma.
+- Tema claro/escuro, sotaque britânico ou americano e velocidade da voz nas Configurações.
 
-Para instalar, abra o arquivo no Android e permita instalar de fontes desconhecidas.
+## Como funciona
+
+Tudo roda no próprio navegador: a leitura das fotos usa o [Tesseract.js](https://github.com/naptha/tesseract.js) (servido junto com o app e guardado para uso offline), a voz e o reconhecimento de fala são os do celular, e a comparação dos textos é um alinhamento palavra a palavra feito no app. Letra cursiva pode ser lida com erros; por isso existe o **Marcar como certo**. O reconhecimento de fala precisa de internet no Chrome.
+
+A versão anterior em Flutter (APK) está no branch `flutter-app`.
 
 ## Desenvolvimento
 
+```bash
+npm install
+npm run dev     # http://localhost:5173/dictation-app/
+npm test
+npm run build
 ```
-flutter pub get
-flutter run
-```
+
+O push no `main` publica no GitHub Pages pelo workflow `.github/workflows/pages.yml`.
