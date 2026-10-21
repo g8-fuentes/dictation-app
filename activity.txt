@@ -1,0 +1,5 @@
+  * Task{72eacd5 #8 type=standard I=com.gfuentes.dictation_app/.MainActivity U=0 visible=true visibleRequested=true mode=fullscreen translucent=false sz=1}
+    topResumedActivity=ActivityRecord{66be065 u0 com.gfuentes.dictation_app/.MainActivity t8}
+    * Hist  #0: ActivityRecord{66be065 u0 com.gfuentes.dictation_app/.MainActivity t8}
+      packageName=com.gfuentes.dictation_app processName=com.gfuentes.dictation_app
+      app=ProcessRecord{c6ddb5b 3146:com.gfuentes.dictation_app/u0a192}
