@@ -18,12 +18,16 @@ class LoadingScreen extends StatefulWidget {
     required this.speaker,
     required this.original,
     required this.student,
+    this.api,
   });
 
   final AppSettings settings;
   final Speaker speaker;
   final Uint8List original;
   final Uint8List student;
+
+  /// Lets tests swap in a fake; the real one is built from settings.
+  final ClaudeApi? api;
 
   @override
   State<LoadingScreen> createState() => _LoadingScreenState();
@@ -52,7 +56,7 @@ class _LoadingScreenState extends State<LoadingScreen> with SingleTickerProvider
     _ticker = Timer.periodic(const Duration(seconds: 4), (_) {
       if (mounted) setState(() => _step = (_step + 1) % _steps.length);
     });
-    final api = ClaudeApi(widget.settings.apiKey, widget.settings.model);
+    final api = widget.api ?? ClaudeApi(widget.settings.apiKey, widget.settings.model);
 
     api.transcribeOriginal(widget.original).then((text) {
       final words = text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();

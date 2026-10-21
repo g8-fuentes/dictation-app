@@ -14,10 +14,11 @@ class ClaudeError implements Exception {
 
 /// Talks to the Anthropic Messages API directly with the user's own key.
 class ClaudeApi {
-  ClaudeApi(this.apiKey, this.model);
+  ClaudeApi(this.apiKey, this.model, {http.Client? client}) : _client = client ?? http.Client();
 
   final String apiKey;
   final String model;
+  final http.Client _client;
   static const quickModel = 'claude-haiku-5-5';
   static final _url = Uri.parse('https://api.anthropic.com/v1/messages');
 
@@ -30,13 +31,15 @@ class ClaudeApi {
       'This photo shows a page from a Callan Method book with a dictation passage. '
           'Transcribe ONLY the dictation passage, exactly as printed. '
           'Reply with the text only, no comments.',
-      maxTokens: 1500,
+      maxTokens: 4000,
+      effort: 'low',
     );
     return text.trim();
   }
 
   Future<Correction> correct(Uint8List original, Uint8List student) async {
-    final text = await _send(model, [original, student], _prompt, maxTokens: 12000);
+    final text = await _send(model, [original, student], _prompt,
+        maxTokens: 32000, effort: 'medium');
     final start = text.indexOf('{');
     final end = text.lastIndexOf('}');
     if (start < 0 || end <= start) {
@@ -52,11 +55,15 @@ class ClaudeApi {
     }
   }
 
+  /// Streams the reply so the connection never sits idle for minutes (mobile
+  /// networks drop silent connections), and returns the full text.
   Future<String> _send(String model, List<Uint8List> images, String prompt,
-      {required int maxTokens}) async {
+      {required int maxTokens, required String effort}) async {
     final body = jsonEncode({
       'model': model,
       'max_tokens': maxTokens,
+      'stream': true,
+      'output_config': {'effort': effort},
       'messages': [
         {
           'role': 'user',
@@ -76,41 +83,80 @@ class ClaudeApi {
       ],
     });
 
-    http.Response res;
+    final req = http.Request('POST', _url)
+      ..headers.addAll({
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      })
+      ..body = body;
+
+    http.StreamedResponse res;
     try {
-      res = await http
-          .post(_url,
-              headers: {
-                'x-api-key': apiKey,
-                'anthropic-version': '2023-06-01',
-                'content-type': 'application/json',
-              },
-              body: body)
-          .timeout(const Duration(seconds: 180));
+      res = await _client.send(req).timeout(const Duration(seconds: 60));
     } catch (_) {
       throw ClaudeError('Sem conexão com o Claude. Verifique a internet e tente de novo.');
     }
 
     if (res.statusCode != 200) {
+      final errBody = await res.stream.bytesToString().catchError((_) => '');
       throw ClaudeError(switch (res.statusCode) {
         401 => 'Chave da API inválida. Confira em Configurações.',
         403 => 'Esta chave não tem permissão para usar o modelo escolhido.',
         413 => 'As fotos são grandes demais. Tente fotos menores.',
         429 => 'Muitas correções seguidas. Espere um pouco e tente de novo.',
         529 || 503 => 'O Claude está sobrecarregado agora. Tente de novo em instantes.',
-        _ => 'Algo deu errado (${res.statusCode}). ${_apiMessage(res.body)}',
+        _ => 'Algo deu errado (${res.statusCode}). ${_apiMessage(errBody)}',
       });
     }
-    final data = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
-    final parts = (data['content'] as List? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .where((b) => b['type'] == 'text')
-        .map((b) => b['text'] as String);
-    final text = parts.join();
+
+    final text = StringBuffer();
+    String? stopReason;
+    try {
+      // Each SSE event arrives within seconds while the model works; a long
+      // silence means the connection is dead.
+      final lines = res.stream
+          .timeout(const Duration(seconds: 90))
+          .transform(utf8.decoder)
+          .transform(const LineSplitter());
+      await for (final line in lines) {
+        if (!line.startsWith('data:')) continue;
+        final Map<String, dynamic> ev;
+        try {
+          ev = jsonDecode(line.substring(5).trim()) as Map<String, dynamic>;
+        } catch (_) {
+          continue;
+        }
+        switch (ev['type']) {
+          case 'content_block_delta':
+            final d = ev['delta'];
+            if (d is Map && d['type'] == 'text_delta') text.write(d['text']);
+          case 'message_delta':
+            final d = ev['delta'];
+            if (d is Map && d['stop_reason'] != null) stopReason = '${d['stop_reason']}';
+          case 'error':
+            final type = (ev['error'] is Map) ? ev['error']['type'] : null;
+            throw ClaudeError(type == 'overloaded_error'
+                ? 'O Claude está sobrecarregado agora. Tente de novo em instantes.'
+                : 'O Claude teve um erro. Tente de novo.');
+        }
+      }
+    } on ClaudeError {
+      rethrow;
+    } catch (_) {
+      throw ClaudeError('A conexão caiu durante a análise. Tente de novo.');
+    }
+
+    if (stopReason == 'refusal') {
+      throw ClaudeError('O Claude não conseguiu processar essas fotos. Tente outras fotos.');
+    }
+    if (stopReason == 'max_tokens') {
+      throw ClaudeError('O texto é longo demais para uma correção só. Tente uma foto com menos texto.');
+    }
     if (text.isEmpty) {
       throw ClaudeError('O Claude não conseguiu ler essas fotos. Tente fotos mais nítidas.');
     }
-    return text;
+    return text.toString();
   }
 
   static String _apiMessage(String body) {

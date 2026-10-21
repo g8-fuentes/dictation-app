@@ -8,7 +8,11 @@ import 'tts.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final settings = AppSettings();
-  await settings.load();
+  try {
+    await settings.load();
+  } catch (_) {
+    // Start with defaults rather than hang on the splash screen.
+  }
   runApp(DictationApp(settings: settings, speaker: Speaker(settings)));
 }
 

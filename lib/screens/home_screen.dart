@@ -23,8 +23,30 @@ class _HomeScreenState extends State<HomeScreen> {
   final _picker = ImagePicker();
   Uint8List? _original;
   Uint8List? _student;
+  bool _picking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _recoverLostPhoto();
+  }
+
+  /// Android may close the app while the camera is open; the photo is then
+  /// handed back on the next start.
+  Future<void> _recoverLostPhoto() async {
+    try {
+      final lost = await _picker.retrieveLostData();
+      final file = lost.file;
+      if (lost.isEmpty || file == null) return;
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      setState(() => _original == null ? _original = bytes : _student = bytes);
+    } catch (_) {}
+  }
 
   Future<void> _pick(bool original, ImageSource source) async {
+    if (_picking) return;
+    _picking = true;
     try {
       final file = await _picker.pickImage(
         source: source,
@@ -37,6 +59,8 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => original ? _original = bytes : _student = bytes);
     } catch (_) {
       _snack('Não consegui abrir a foto. Tente de novo.');
+    } finally {
+      _picking = false;
     }
   }
 
