@@ -2,24 +2,14 @@
 
 App Android (Flutter) para corrigir as dictations do Método Callan.
 
-1. Tire ou escolha a foto do texto original do livro.
-2. Tire ou escolha a foto do que o aluno escreveu.
-3. Toque em **Corrigir**. Enquanto o Gemini analisa, as palavras da dictation aparecem na tela e cada uma fala a pronúncia ao ser tocada.
-4. O resultado mostra a nota, os erros e a dictation dividida em trechos, com o original, o que o aluno escreveu marcado e a explicação de cada erro. O botão **Tocar** narra a dictation, com pausas como num ditado.
+Tudo funciona no próprio celular, sem chave de API e sem conta.
 
-O tema claro/escuro troca no ícone do topo.
+- **Corrigir:** tire ou escolha a foto da página do livro e a do caderno do aluno e toque em **Corrigir**. O texto das fotos é lido no aparelho (ML Kit do Google, offline), comparado palavra por palavra e cada erro vem com uma explicação curta. A dictation aparece dividida em trechos, com narração e pausas como num ditado. Se a leitura da letra de mão errar, toque em **Marcar como certo** no erro e a nota é recalculada.
+- **Progresso:** cada correção fica salva com a data, o número da dictation (lido da página) e a nota, com um gráfico das notas ao longo do curso. Arraste um item para a esquerda para apagar.
+- **Ouvir:** foto de qualquer texto em inglês, lido de uma vez em voz nativa.
+- **Pronúncia:** escolha uma dictation do histórico (ou a foto de um texto), grave a sua leitura e veja as palavras que o celular entendeu diferente. Toque numa palavra para ouvir a pronúncia certa. Usa o reconhecimento de voz do próprio Android, então é uma aproximação, não uma avaliação fonética.
 
-## Chave da API
-
-O app usa a API do Gemini com a sua própria chave, que é gratuita. Crie uma em <https://aistudio.google.com/apikey> e cole em **Configurações** no app. A chave fica salva só no celular.
-
-Quando o modelo principal está ocupado ou passou do limite gratuito, o app tenta sozinho outro modelo Flash.
-
-Para testar a correção de verdade pelo terminal:
-
-```
-GEMINI_API_KEY=... dart run tool/live_check.dart foto-do-livro.jpg foto-do-aluno.jpg
-```
+O tema claro/escuro troca no ícone do topo; voz e velocidade ficam em Configurações.
 
 ## APK
 

@@ -13,15 +13,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  late final _key = TextEditingController(text: widget.settings.apiKey);
-  bool _show = false;
-
-  @override
-  void dispose() {
-    _key.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final s = widget.settings;
@@ -36,28 +27,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         builder: (context, _) => ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text('Chave da API do Gemini', style: text.titleMedium),
-            const SizedBox(height: 4),
-            Text('Grátis em aistudio.google.com/apikey. Ela fica salva só neste celular.',
-                style: text.bodySmall),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _key,
-              obscureText: !_show,
-              autocorrect: false,
-              enableSuggestions: false,
-              decoration: InputDecoration(
-                border: const OutlineInputBorder(),
-                hintText: 'Cole a chave aqui',
-                suffixIcon: IconButton(
-                  icon: Icon(_show ? Icons.visibility_off : Icons.visibility),
-                  onPressed: () => setState(() => _show = !_show),
-                ),
-              ),
-              onChanged: s.setApiKey,
-            ),
-            const SizedBox(height: 8),
-            const SizedBox(height: 20),
             Text('Voz da narração', style: text.titleMedium),
             const SizedBox(height: 8),
             SegmentedButton<bool>(

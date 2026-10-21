@@ -1,46 +1,52 @@
 import 'package:flutter/material.dart';
 
+import '../app_state.dart';
+import '../checker.dart';
 import '../models.dart';
-import '../settings.dart';
 import '../theme.dart';
 import '../tts.dart';
-import 'word_chip.dart';
 
 class ResultScreen extends StatefulWidget {
-  const ResultScreen({
-    super.key,
-    required this.settings,
-    required this.speaker,
-    required this.result,
-  });
+  const ResultScreen({super.key, required this.app, required this.record});
 
-  final AppSettings settings;
-  final Speaker speaker;
-  final Correction result;
+  final AppState app;
+  final DictationRecord record;
 
   @override
   State<ResultScreen> createState() => _ResultScreenState();
 }
 
 class _ResultScreenState extends State<ResultScreen> {
-  late final _keys = List.generate(widget.result.segments.length, (_) => GlobalKey());
+  Correction get _result => widget.record.correction;
+  Speaker get _speaker => widget.app.speaker;
+  late final _keys = List.generate(_result.segments.length, (_) => GlobalKey());
   bool _playing = false;
   bool _withPauses = true;
   bool _slow = false;
   int _current = -1;
   String? _word; // "segment:index" of the word being spoken
 
-  double get _rate => _slow ? widget.settings.speechRate * .7 : widget.settings.speechRate;
+  double get _rate =>
+      _slow ? widget.app.settings.speechRate * .7 : widget.app.settings.speechRate;
 
   @override
   void dispose() {
-    widget.speaker.stop();
+    _speaker.stop();
     super.dispose();
+  }
+
+  Future<void> _markCorrect(Mistake m) async {
+    setState(() => _result.markCorrect(m));
+    await widget.app.history.save();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text('Marcado como certo. Nova nota: ${_result.score}')));
   }
 
   Future<void> _togglePlay() async {
     if (_playing) {
-      await widget.speaker.stop();
+      await _speaker.stop();
       setState(() {
         _playing = false;
         _current = -1;
@@ -51,8 +57,8 @@ class _ResultScreenState extends State<ResultScreen> {
       _playing = true;
       _word = null;
     });
-    await widget.speaker.dictate(
-      [for (final s in widget.result.segments) s.original],
+    await _speaker.dictate(
+      [for (final s in _result.segments) s.original],
       pause: _withPauses ? const Duration(milliseconds: 2500) : const Duration(milliseconds: 350),
       rate: _rate,
       onPart: (i) {
@@ -78,7 +84,7 @@ class _ResultScreenState extends State<ResultScreen> {
       _current = -1;
       _word = '$seg:$i';
     });
-    await widget.speaker.say(cleanWord(word), rate: _rate);
+    await _speaker.say(Checker.bare(word), rate: _rate);
     if (mounted && _word == '$seg:$i') setState(() => _word = null);
   }
 
@@ -88,19 +94,19 @@ class _ResultScreenState extends State<ResultScreen> {
       _word = null;
       _current = seg;
     });
-    await widget.speaker.say(widget.result.segments[seg].original, rate: _rate);
+    await _speaker.say(_result.segments[seg].original, rate: _rate);
     if (mounted && _current == seg && !_playing) setState(() => _current = -1);
   }
 
   @override
   Widget build(BuildContext context) {
-    final r = widget.result;
+    final r = _result;
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Resultado'),
-        actions: [ThemeToggleButton(onToggle: widget.settings.toggleTheme)],
+        title: Text(widget.record.title),
+        actions: [ThemeToggleButton(onToggle: widget.app.settings.toggleTheme)],
       ),
       // The play button scrolls away while the reading follows the text, so
       // keep a stop button on screen.
@@ -133,6 +139,7 @@ class _ResultScreenState extends State<ResultScreen> {
                 activeWord: _word,
                 onPlay: () => _saySegment(i),
                 onWord: (w, word) => _sayWord(i, w, word),
+                onMarkCorrect: _markCorrect,
               ),
               const SizedBox(height: 12),
             ],
@@ -162,8 +169,8 @@ class _ResultScreenState extends State<ResultScreen> {
             FilledButton.tonalIcon(
               style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
               onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.refresh),
-              label: const Text('Nova correção'),
+              icon: const Icon(Icons.check),
+              label: const Text('Concluir'),
             ),
           ],
         ),
@@ -306,6 +313,7 @@ class _SegmentCard extends StatelessWidget {
     required this.activeWord,
     required this.onPlay,
     required this.onWord,
+    required this.onMarkCorrect,
   });
 
   final int index;
@@ -314,6 +322,7 @@ class _SegmentCard extends StatelessWidget {
   final String? activeWord;
   final VoidCallback onPlay;
   final void Function(int i, String word) onWord;
+  final ValueChanged<Mistake> onMarkCorrect;
 
   @override
   Widget build(BuildContext context) {
@@ -383,7 +392,7 @@ class _SegmentCard extends StatelessWidget {
                 ),
                 for (final e in segment.mistakes) ...[
                   const SizedBox(height: 10),
-                  _MistakeRow(mistake: e),
+                  _MistakeRow(mistake: e, onMarkCorrect: () => onMarkCorrect(e)),
                 ],
               ],
             ),
@@ -475,9 +484,10 @@ class _TapWord extends StatelessWidget {
 }
 
 class _MistakeRow extends StatelessWidget {
-  const _MistakeRow({required this.mistake});
+  const _MistakeRow({required this.mistake, required this.onMarkCorrect});
 
   final Mistake mistake;
+  final VoidCallback onMarkCorrect;
 
   @override
   Widget build(BuildContext context) {
@@ -525,6 +535,14 @@ class _MistakeRow extends StatelessWidget {
           const SizedBox(height: 4),
           Text(e.why, style: text.bodyMedium),
         ],
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: onMarkCorrect,
+            icon: const Icon(Icons.check_circle_outline, size: 18),
+            label: const Text('Marcar como certo'),
+          ),
+        ),
       ]),
     );
   }

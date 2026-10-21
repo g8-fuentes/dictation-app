@@ -5,25 +5,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppSettings extends ChangeNotifier {
   SharedPreferences? _store;
 
-  String apiKey = '';
   ThemeMode themeMode = ThemeMode.system;
   bool britishVoice = true;
   double speechRate = 0.42;
 
   Future<void> load() async {
     _store = await SharedPreferences.getInstance();
-    apiKey = _store!.getString('geminiKey') ?? '';
     themeMode = ThemeMode.values[_store!.getInt('themeMode') ?? ThemeMode.system.index];
     britishVoice = _store!.getBool('britishVoice') ?? true;
     speechRate = _store!.getDouble('speechRate') ?? 0.42;
-  }
-
-  bool get hasKey => apiKey.trim().isNotEmpty;
-
-  Future<void> setApiKey(String v) async {
-    apiKey = v.trim();
-    await _store?.setString('geminiKey', apiKey);
-    notifyListeners();
   }
 
   /// Flips between light and dark, starting from whatever is on screen now.

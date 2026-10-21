@@ -1,23 +1,40 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:io';
 
-import 'package:dictation_app/gemini_api.dart';
+import 'package:dictation_app/app_state.dart';
+import 'package:dictation_app/history.dart';
 import 'package:dictation_app/main.dart';
-import 'package:dictation_app/screens/loading_screen.dart';
+import 'package:dictation_app/reader.dart';
 import 'package:dictation_app/settings.dart';
 import 'package:dictation_app/theme.dart';
 import 'package:dictation_app/tts.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/testing.dart';
+import 'package:image_picker_platform_interface/image_picker_platform_interface.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../test/app_test.dart' show sample;
-import '../test/screens_test.dart' show reply;
+import '../test/fakes.dart' show FakeSpeech;
+import 'images.dart';
 
-/// Runs on a real Android device/emulator with the real plugins (voice,
-/// storage); only the Claude API is faked.
+/// Hands out real image files, one per pick.
+class FilePicker extends ImagePickerPlatform with MockPlatformInterfaceMixin {
+  final queue = <String>[];
+
+  @override
+  Future<XFile?> getImageFromSource({
+    required ImageSource source,
+    ImagePickerOptions options = const ImagePickerOptions(),
+  }) async =>
+      queue.isEmpty ? null : XFile(queue.removeAt(0));
+
+  @override
+  Future<LostDataResponse> getLostData() async => LostDataResponse.empty();
+}
+
+/// Runs on a real Android device/emulator with the real plugins: ML Kit text
+/// recognition, voice and storage. Only the camera and microphone are faked.
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -29,89 +46,106 @@ void main() {
       await binding.convertFlutterSurfaceToImage();
       surfaceReady = true;
     }
-    await t.pump();
+    await t.pumpAndSettle();
     await binding.takeScreenshot(name);
   }
 
-  Future<void> wait(WidgetTester t, int ms) async {
+  Future<String> file(String name, String b64) async {
+    final f = File('${Directory.systemTemp.path}/$name');
+    await f.writeAsBytes(base64Decode(b64));
+    return f.path;
+  }
+
+  Future<void> settle(WidgetTester t, [int ms = 3000]) async {
     final end = DateTime.now().add(Duration(milliseconds: ms));
     while (DateTime.now().isBefore(end)) {
       await t.pump(const Duration(milliseconds: 100));
     }
   }
 
-  testWidgets('home, theme, settings', (t) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    final s = AppSettings();
-    await s.load();
-    await t.pumpWidget(DictationApp(settings: s, speaker: Speaker(s)));
+  testWidgets('ML Kit reads the book page and the handwriting', (t) async {
+    final reader = MlKitReader();
+    final sw = Stopwatch()..start();
+    final book = await reader.read(await file('book.jpg', bookJpg));
+    final hand = await reader.read(await file('hand.jpg', handJpg));
+    debugPrint('OCR_BOOK (${sw.elapsedMilliseconds} ms): $book');
+    debugPrint('OCR_HAND: $hand');
+    expect(book, contains('The teacher is standing in front of the class.'));
+    expect(hand.toLowerCase(), contains('teacher'));
+  });
+
+  testWidgets('correct, mark as correct, progress, listen, pronunciation', (t) async {
+    await (await SharedPreferences.getInstance()).clear();
+    final settings = AppSettings();
+    await settings.load();
+    final history = History();
+    await history.load();
+    final picker = FilePicker();
+    ImagePickerPlatform.instance = picker;
+    final app = AppState(
+      settings: settings,
+      history: history,
+      speaker: Speaker(settings),
+      reader: MlKitReader(),
+      speech: FakeSpeech('the teacher is standing in front of the class she is riding some words'),
+    );
+    final book = await file('book.jpg', bookJpg);
+    final hand = await file('hand.jpg', handJpg);
+
+    await t.pumpWidget(DictationApp(app: app));
     await t.pumpAndSettle();
-    expect(find.text('Texto original'), findsOneWidget);
-    await shot(t, '01-home');
+    await shot(t, '01-correct');
+
+    picker.queue.addAll([book, hand]);
+    await t.tap(find.text('Câmera').first);
+    await settle(t, 1000);
+    await t.tap(find.text('Câmera').last);
+    await settle(t, 1000);
+    await t.tap(find.byKey(const ValueKey('correct')));
+    await settle(t, 6000);
+    expect(find.text('A dictation, trecho por trecho'), findsOneWidget);
+    expect(history.records, hasLength(1));
+    final c = history.records.first.correction;
+    debugPrint('RESULT ${history.records.first.title}: score ${c.score}, '
+        '${[for (final m in c.mistakes) '${m.type}:${m.written}>${m.correct}'].join(' | ')}');
+    await shot(t, '02-result');
+
+    final before = c.mistakes.length;
+    final mark = find.text('Marcar como certo').first;
+    await t.ensureVisible(mark);
+    await t.pumpAndSettle();
+    await shot(t, '03-result-mistake');
+    await t.tap(mark);
+    await settle(t, 1000);
+    expect(history.records.first.correction.mistakes.length, before - 1);
+
+    await t.pageBack();
+    await t.pumpAndSettle();
+    await t.tap(find.text('Progresso').last);
+    await t.pumpAndSettle();
+    await shot(t, '04-progress');
+
+    await t.tap(find.text('Ouvir').last);
+    await t.pumpAndSettle();
+    picker.queue.add(book);
+    await t.tap(find.text('Câmera'));
+    await settle(t, 3000);
+    expect(find.byKey(const ValueKey('listen-play')), findsOneWidget);
+    await shot(t, '05-listen');
+    await t.tap(find.byKey(const ValueKey('listen-play')));
+    await settle(t, 500);
+
+    await t.tap(find.text('Pronúncia').last);
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const ValueKey('record')));
+    await settle(t, 500);
+    await t.tap(find.byKey(const ValueKey('record')));
+    await settle(t, 1000);
+    expect(find.textContaining('para revisar'), findsOneWidget);
+    await shot(t, '06-pronunciation');
 
     await t.tap(find.byType(ThemeToggleButton));
     await t.pumpAndSettle();
-    await shot(t, '02-home-theme');
-
-    await t.tap(find.byTooltip('Configurações'));
-    await t.pumpAndSettle();
-    await t.enterText(find.byType(TextField), 'AIza-test');
-    await t.pumpAndSettle();
-    await shot(t, '03-settings');
-    await t.pageBack();
-    await t.pumpAndSettle();
-    expect(find.text('Falta a chave da API'), findsNothing);
-    expect((await SharedPreferences.getInstance()).getString('geminiKey'), 'AIza-test');
-  });
-
-  testWidgets('loading words speak, result narrates', (t) async {
-    final s = AppSettings();
-    await s.load();
-    final speaker = Speaker(s);
-    final client = MockClient((req) async {
-      if (req.url.path.contains(GeminiApi.quickModels.first)) {
-        return reply('The teacher is standing in front of the class.');
-      }
-      await Future.delayed(const Duration(seconds: 6));
-      return reply(jsonEncode(sample));
-    });
-    final img = Uint8List.fromList([0xFF, 0xD8, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    await t.pumpWidget(MaterialApp(
-      theme: buildTheme(Brightness.light),
-      darkTheme: buildTheme(Brightness.dark),
-      home: LoadingScreen(
-        settings: s,
-        speaker: speaker,
-        original: img,
-        student: img,
-        api: GeminiApi('k', client: client),
-      ),
-    ));
-    await wait(t, 1500);
-    expect(find.text('front'), findsOneWidget);
-    await t.tap(find.text('front'));
-    await wait(t, 600);
-    await shot(t, '04-loading');
-    await t.tap(find.text('teacher'));
-    await wait(t, 300);
-
-    await wait(t, 6000);
-    await t.pumpAndSettle();
-    expect(find.text('Resultado'), findsOneWidget);
-    await shot(t, '05-result');
-
-    await t.tap(find.text('Tocar'));
-    await wait(t, 1500);
-    expect(find.byKey(const ValueKey('stop-fab')), findsOneWidget);
-    await shot(t, '06-result-playing');
-    await t.tap(find.byKey(const ValueKey('stop-fab')));
-    await wait(t, 3000);
-    expect(find.byKey(const ValueKey('stop-fab')), findsNothing);
-
-    await t.tap(find.byTooltip('Ouvir este trecho').first);
-    await wait(t, 2000);
-    await t.scrollUntilVisible(find.text('Nova correção'), 300);
-    await shot(t, '07-result-bottom');
+    await shot(t, '07-pronunciation-dark');
   });
 }

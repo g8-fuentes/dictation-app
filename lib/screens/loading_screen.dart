@@ -1,206 +1,82 @@
-import 'dart:async';
-import 'dart:typed_data';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 
-import '../gemini_api.dart';
-import '../settings.dart';
-import '../tts.dart';
+import '../app_state.dart';
+import '../checker.dart';
+import '../models.dart';
+import 'photo_slot.dart';
 import 'result_screen.dart';
-import 'word_chip.dart';
 
-/// Runs the correction. While it works, the dictation's own words appear as
-/// buttons the student can tap to hear each one.
+/// Reads both photos on the device, corrects the copy, saves it to the
+/// history and opens the result.
 class LoadingScreen extends StatefulWidget {
-  const LoadingScreen({
-    super.key,
-    required this.settings,
-    required this.speaker,
-    required this.original,
-    required this.student,
-    this.api,
-  });
+  const LoadingScreen({super.key, required this.app, required this.original, required this.student});
 
-  final AppSettings settings;
-  final Speaker speaker;
-  final Uint8List original;
-  final Uint8List student;
-
-  /// Lets tests swap in a fake; the real one is built from settings.
-  final GeminiApi? api;
+  final AppState app;
+  final Photo original;
+  final Photo student;
 
   @override
   State<LoadingScreen> createState() => _LoadingScreenState();
 }
 
-class _LoadingScreenState extends State<LoadingScreen> with SingleTickerProviderStateMixin {
-  static const _steps = [
-    'Lendo a página do livro…',
-    'Lendo a letra do aluno…',
-    'Comparando palavra por palavra…',
-    'Separando a dictation em trechos…',
-    'Preparando as explicações…',
-  ];
-
-  late final _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))
-    ..repeat(reverse: true);
-  late final Timer _ticker;
-  int _step = 0;
-  List<String>? _words;
-  bool _wordsFailed = false;
-  int? _playing;
-
+class _LoadingScreenState extends State<LoadingScreen> {
   @override
   void initState() {
     super.initState();
-    _ticker = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (mounted) setState(() => _step = (_step + 1) % _steps.length);
-    });
-    final api = widget.api ?? GeminiApi(widget.settings.apiKey);
-
-    api.transcribeOriginal(widget.original).then((text) {
-      final words = text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
-      if (mounted) setState(() => words.isEmpty ? _wordsFailed = true : _words = words);
-    }, onError: (_) {
-      if (mounted) setState(() => _wordsFailed = true);
-    });
-
-    api.correct(widget.original, widget.student).then((result) {
-      if (!mounted) return;
-      widget.speaker.stop();
-      Navigator.of(context).pushReplacement(MaterialPageRoute(
-        builder: (_) => ResultScreen(
-          settings: widget.settings,
-          speaker: widget.speaker,
-          result: result,
-        ),
-      ));
-    }, onError: (Object e) {
-      if (!mounted) return;
-      widget.speaker.stop();
-      Navigator.of(context).pop(e is ApiError ? e.message : 'Algo deu errado. Tente de novo.');
-    });
+    _run();
   }
 
-  @override
-  void dispose() {
-    _ticker.cancel();
-    _pulse.dispose();
-    super.dispose();
+  Future<void> _run() async {
+    final reader = widget.app.reader;
+    String page, copy;
+    try {
+      (page, copy) = await (
+        reader.read(widget.original.path),
+        reader.read(widget.student.path),
+      ).wait;
+    } catch (_) {
+      _fail('Não consegui ler as fotos. Tente fotos mais nítidas e retas.');
+      return;
+    }
+    if (Checker.words(page).isEmpty) {
+      _fail('Não encontrei texto na foto do livro. Tente uma foto mais nítida.');
+      return;
+    }
+    if (Checker.words(copy).isEmpty) {
+      _fail('Não encontrei texto na foto do aluno. Tente uma foto mais nítida.');
+      return;
+    }
+    final correction = Checker.check(Checker.trimToMatch(page, copy), copy);
+    final record = DictationRecord(
+      id: '${DateTime.now().microsecondsSinceEpoch}${Random().nextInt(999)}',
+      date: DateTime.now(),
+      number: Checker.dictationNumber(page),
+      correction: correction,
+    );
+    await widget.app.history.add(record);
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(MaterialPageRoute(
+      builder: (_) => ResultScreen(app: widget.app, record: record),
+    ));
   }
 
-  Future<void> _tap(int i) async {
-    setState(() => _playing = i);
-    await widget.speaker.say(cleanWord(_words![i]));
-    if (mounted && _playing == i) setState(() => _playing = null);
+  void _fail(String message) {
+    if (mounted) Navigator.of(context).pop(message);
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    return PopScope(
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) widget.speaker.stop();
-      },
-      child: Scaffold(
-        appBar: AppBar(title: const Text('Analisando')),
-        body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-            children: [
-              Center(
-                child: ScaleTransition(
-                  scale: Tween(begin: .9, end: 1.08)
-                      .animate(CurvedAnimation(parent: _pulse, curve: Curves.easeInOut)),
-                  child: CircleAvatar(
-                    radius: 40,
-                    backgroundColor: scheme.primaryContainer,
-                    child: Icon(Icons.auto_stories_outlined,
-                        size: 40, color: scheme.onPrimaryContainer),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 400),
-                child: Text(
-                  _steps[_step],
-                  key: ValueKey(_step),
-                  textAlign: TextAlign.center,
-                  style: text.titleMedium,
-                ),
-              ),
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: const LinearProgressIndicator(minHeight: 6),
-              ),
-              const SizedBox(height: 6),
-              Text('Pode levar até 1 minuto.',
-                  textAlign: TextAlign.center,
-                  style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-              const SizedBox(height: 28),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: AnimatedSize(
-                    duration: const Duration(milliseconds: 300),
-                    alignment: Alignment.topCenter,
-                    child: _wordsPanel(scheme, text),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _wordsPanel(ColorScheme scheme, TextTheme text) {
-    if (_words == null) {
-      return Row(children: [
-        if (!_wordsFailed) ...[
-          const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-          const SizedBox(width: 12),
-        ],
-        Expanded(
-          child: Text(
-            _wordsFailed
-                ? 'As palavras da dictation vão aparecer no resultado.'
-                : 'Buscando as palavras da dictation…',
-            style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-        ),
-      ]);
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(children: [
-          Icon(Icons.touch_app_outlined, color: scheme.primary),
-          const SizedBox(width: 8),
-          Expanded(child: Text('Enquanto isso, pratique', style: text.titleMedium)),
+    return Scaffold(
+      body: Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const SizedBox(width: 56, height: 56, child: CircularProgressIndicator(strokeWidth: 5)),
+          const SizedBox(height: 24),
+          Text('Analisando…', style: text.titleMedium),
         ]),
-        const SizedBox(height: 4),
-        Text('Toque numa palavra da dictation para ouvir a pronúncia.',
-            style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
-        const SizedBox(height: 14),
-        Wrap(
-          spacing: 6,
-          runSpacing: 8,
-          children: [
-            for (var i = 0; i < _words!.length; i++)
-              WordChip(
-                word: _words![i],
-                active: _playing == i,
-                delay: Duration(milliseconds: 25 * i),
-                onTap: () => _tap(i),
-              ),
-          ],
-        ),
-      ],
+      ),
     );
   }
 }
