@@ -93,9 +93,9 @@ async function ask<T>(key: string, files: Blob[], prompt: string): Promise<T> {
 }
 
 const dictationPrompt = `Image 1 is a page of a Callan Method book with a dictation passage. Image 2 is a student's handwritten copy of that dictation.
-1. "original": transcribe ONLY the dictation passage from image 1, exactly as printed. If the page has more than one dictation or other text, use the passage that matches what the student wrote. Do not include headings like "Lesson 41" or "Dictation 59".
+1. "original": transcribe ONLY the dictation passage from image 1, exactly as printed. If the page has more than one dictation or other text, use the passage that matches what the student wrote. Keep the "/" pause marks if the page has them. Do not include headings like "Lesson 41", "Dictation 59" or "Correct your dictation".
 2. "number": the dictation number printed on the page (e.g. 59 for "Dictation 59"), or null.
-3. "student": transcribe the handwriting in image 2 EXACTLY as written, letter by letter. Keep every misspelling, missing or extra word, wrong capital letter and wrong punctuation. Never correct anything, and never fill in a word from the original. If a word is illegible, write [?].
+3. "student": transcribe the handwriting in image 2 EXACTLY as written, letter by letter. Keep every misspelling, missing or extra word, wrong capital letter and wrong punctuation. Never correct anything, and never fill in a word from the original. Write a capital letter only when it is clearly a capital in the handwriting. If a word is illegible, write [?].
 Reply with only this JSON: {"original": "...", "number": 59, "student": "..."}`
 
 const photoPrompt = `Transcribe all the text in this photo exactly as written, in reading order, as running text (join the lines; keep paragraphs separated by a blank line). Reply with only this JSON: {"text": "..."}`

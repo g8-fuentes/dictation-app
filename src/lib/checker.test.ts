@@ -96,3 +96,24 @@ describe('loose punctuation', () => {
     expect(d.mistakes.some((m) => m.type === 'palavra a mais' || m.type === 'palavra faltando')).toBe(false)
   })
 })
+
+describe('Callan "Correct your dictation" page', () => {
+  const page = `Correct your dictation: They go to bed at eleven / and get up at seven. / During the day / we can see the sun in the sky, / whilst during the night / we can see the moon and the stars. / A millionaire / is a rich person. / I forgot my camera, / so I took the photos / on my mobile instead. / We want to go / for a long walk, / but it depends on the weather. / Not every student is quick; / some are quick / and some are slow. / When the weather is cold / and there is snow, / we cover our bodies / with a lot of clothes. / I had to meet him / at the corner of the street, / and he asked me / to bring him some cash. / The opposite of heaven / is hell. / Learning to drive / was a struggle; / I found it quite hard. / Some people / are willing to die / for what they believe. / Smoking cigarettes / causes terrible health problems. / Parents often read / bedtime stories to their children. / In some ways, / life today is harder / than it was in the past, / but in other ways / it is easier. / If somebody wants / to buy my motorbike / before I go away, / I'll sell it / for almost nothing. / Many teenagers don't like / wearing a uniform for school.`
+  const copy = `They go to bed at eleven and get up at seven. During The day we can see The sun in The sky, whilst during the night we can see the moon and The stars. A millionaire is a rich person. I forgot my camera, so I took the photos on my mobile instead. We want to go for a long walk, but it depends on the weather. Not every student is quick; some are quick and some are slow. When the weather is cold and there is snow we cover our bodies with a lot of clothes. I had to meet him at the corner of the streets and he asked me to bring him some cash. The opposite of heaven is hell. Learning to drive was a struggle; I found it quite hard. Some people are willing to die for what they believe. Smoking cigarettes causes terrible health problems. Parents often read bedtime stories to their children. In some ways, life today is harder than it was in the past, but in the others ways it is easier. If somebody wants to buy motorbike before I go away, I'll sell it for almost nothing. Many teenagers don't like wearing a uniform for school.`
+
+  test('uses the "/" marks as the parts and never as words', () => {
+    const c = check(trimToMatch(page, copy), copy)
+    expect(c.originalText).not.toContain('/')
+    expect(c.originalText.startsWith('They go')).toBe(true)
+    expect(c.segments[0].original).toBe('They go to bed at eleven')
+    expect(c.segments[1].original).toBe('and get up at seven.')
+    expect(c.mistakes.map((m) => [m.written, m.correct])).toEqual([
+      ['snow', 'snow,'],
+      ['streets', 'street,'],
+      ['the', ''],
+      ['others', 'other'],
+      ['', 'my'],
+    ])
+    expect(c.score).toBe('9.8')
+  })
+})

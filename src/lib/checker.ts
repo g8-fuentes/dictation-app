@@ -16,11 +16,27 @@ export const bare = (w: string) => w.replace(edgePunct, '').toLowerCase()
 
 const noPunct = (w: string) => w.replace(edgePunct, '')
 
+/**
+ * The original's words, plus where the book marks the teacher's pauses with
+ * "/" (Callan "Correct your dictation" pages). The marks are not words.
+ */
+function withPauses(text: string): { orig: string[]; pauses: Set<number> } {
+  const orig: string[] = []
+  const pauses = new Set<number>()
+  for (const raw of text.trim().split(/\s+/)) {
+    for (const [k, part] of raw.split('/').entries()) {
+      if (k > 0 && orig.length) pauses.add(orig.length - 1)
+      if (/[\p{L}\p{N}]/u.test(part)) orig.push(part)
+    }
+  }
+  return { orig, pauses }
+}
+
 export function check(original: string, student: string): Correction {
-  const orig = words(original)
+  const { orig, pauses } = withPauses(original)
   const stud = words(student)
   const ops = align(orig, stud)
-  const segOf = segmentIndex(orig)
+  const segOf = pauses.size ? pauseIndex(orig, pauses) : segmentIndex(orig)
   const segCount = orig.length ? segOf[segOf.length - 1] + 1 : 0
   const segTokens: Token[][] = Array.from({ length: segCount }, () => [])
   const mistakes: Mistake[] = []
@@ -31,8 +47,10 @@ export function check(original: string, student: string): Correction {
     lastSeg = seg
     if (op.o !== null && op.s !== null) {
       const o = orig[op.o], s = stud[op.s]
-      if (o === s) {
-        segTokens[seg].push({ t: s, s: 'ok' })
+      // A capital where the book has a small letter is not counted: in
+      // handwriting it is usually the reading that is wrong, not the student.
+      if (o === s || capitalOnly(o, s)) {
+        segTokens[seg].push({ t: o, s: 'ok' })
       } else {
         segTokens[seg].push({ t: s, s: 'wrong', c: o })
         const [type, why] = explain(s, o)
@@ -61,6 +79,19 @@ export function check(original: string, student: string): Correction {
   }
 }
 
+const capitalOnly = (o: string, s: string) => o !== s && o.toLowerCase() === s.toLowerCase() && o[0] !== o[0].toUpperCase() && o.slice(1) === s.slice(1)
+
+/** One segment per stretch between the book's "/" marks. */
+function pauseIndex(orig: string[], pauses: Set<number>): number[] {
+  const seg: number[] = []
+  let current = 0
+  orig.forEach((_, i) => {
+    seg.push(current)
+    if (pauses.has(i) && i < orig.length - 1) current++
+  })
+  return seg
+}
+
 /** Splits the original into short phrases, the way a teacher dictates: at punctuation, never more than 8 words. */
 function segmentIndex(orig: string[]): number[] {
   const seg: number[] = []
@@ -80,15 +111,18 @@ function segmentIndex(orig: string[]): number[] {
 
 /** Picks the stretch of the book page that best matches the student's copy, leaving out headings and other exercises. */
 export function trimToMatch(original: string, student: string): string {
-  const orig = words(original)
+  // Raw pieces keep the "/" pause marks; only pieces with letters are compared.
+  const raw = original.trim().split(/\s+/).filter(Boolean)
+  const at = raw.flatMap((t, i) => (/[\p{L}\p{N}]/u.test(t) ? [i] : []))
+  const orig = at.map((i) => raw[i])
   const stud = words(student)
   if (!orig.length || !stud.length) return original.trim()
   const ops = align(orig, stud, true)
   const matched = ops
     .filter((op) => op.o !== null && op.s !== null && subCost(orig[op.o], stud[op.s]) < 1)
     .map((op) => op.o as number)
-  if (!matched.length) return orig.join(' ')
-  return orig.slice(matched[0], matched[matched.length - 1] + 1).join(' ')
+  if (!matched.length) return raw.join(' ')
+  return raw.slice(at[matched[0]], at[matched[matched.length - 1]] + 1).join(' ')
 }
 
 function subCost(o: string, s: string): number {
